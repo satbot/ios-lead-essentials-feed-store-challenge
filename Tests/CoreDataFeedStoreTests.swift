@@ -5,18 +5,22 @@
 import XCTest
 import FeedStoreChallenge
 
-class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
+class CoreDataFeedStore: FeedStore {
+    func deleteCachedFeed(completion: @escaping DeletionCompletion) {}
     
-//
-//   We recommend you to implement one test at a time.
-//   Uncomment the test implementations one by one.
-//      Follow the process: Make the test pass, commit, and move to the next one.
-//
+    func insert(_ feed: [LocalFeedImage], timestamp: Date, completion: @escaping InsertionCompletion) {}
+    
+    func retrieve(completion: @escaping RetrievalCompletion) {
+        completion(.empty)
+    }
+}
+
+class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
 
     func test_retrieve_deliversEmptyOnEmptyCache() {
-//        let sut = makeSUT()
-//
-//        assertThatRetrieveDeliversEmptyOnEmptyCache(on: sut)
+        let sut = makeSUT()
+
+        assertThatRetrieveDeliversEmptyOnEmptyCache(on: sut)
     }
 
     func test_retrieve_hasNoSideEffectsOnEmptyCache() {
@@ -88,7 +92,7 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     // - MARK: Helpers
     
     private func makeSUT() -> FeedStore {
-        fatalError("Must be implemented")
+        CoreDataFeedStore()
     }
     
 }
