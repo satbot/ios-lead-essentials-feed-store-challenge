@@ -7,17 +7,21 @@ import FeedStoreChallenge
 
 extension CoreDataClient {
     func retrieveFeedCache(from context: NSManagedObjectContext? = nil) -> (feed: [LocalFeedImage], timestamp: Date)? {
+        guard
+            let managedCache = retrieveManagedCache(from: context),
+            let managedFeed = managedCache.feed?.array as? [ManagedLocalFeedImage],
+            let cacheTimestamp = managedCache.timestamp
+            else { return nil }
+        
+        let feed = managedFeed.compactMap { $0.localFeedImage }
+        return (feed: feed, timestamp: cacheTimestamp)
+    }
+    
+    func retrieveManagedCache(from context: NSManagedObjectContext? = nil) -> ManagedCache? {
         let context = context ?? viewContext
         let fetchRequest: NSFetchRequest<ManagedCache> = ManagedCache.fetchRequest()
         do {
-            guard
-                let managedCache = try context.fetch(fetchRequest).first,
-                let managedFeed = managedCache.feed?.array as? [ManagedLocalFeedImage],
-                let cacheTimestamp = managedCache.timestamp
-                else { return nil }
-            
-            let feed = managedFeed.compactMap { $0.localFeedImage }
-            return (feed: feed, timestamp: cacheTimestamp)
+            return try context.fetch(fetchRequest).first
         } catch {
             return nil
         }
@@ -79,8 +83,12 @@ class CoreDataFeedStore: FeedStore {
             guard let self = self else { return }
             let backgroundContext = self.coreDataClient.newBackgroundContext()
             
-            let managedLocalFeed = NSOrderedSet(array: feed.map { ManagedLocalFeedImage.from($0, in: backgroundContext) })
+            if let feedCache = self.coreDataClient.retrieveManagedCache(from: backgroundContext) {
+                backgroundContext.delete(feedCache)
+            }
+
             let managedCache = ManagedCache.init(context: backgroundContext)
+            let managedLocalFeed = NSOrderedSet(array: feed.map { ManagedLocalFeedImage.from($0, in: backgroundContext) })
             managedCache.feed = managedLocalFeed
             managedCache.timestamp = timestamp
             
@@ -157,9 +165,9 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     }
 
     func test_insert_overridesPreviouslyInsertedCacheValues() {
-//        let sut = makeSUT()
-//
-//        assertThatInsertOverridesPreviouslyInsertedCacheValues(on: sut)
+        let sut = makeSUT()
+
+        assertThatInsertOverridesPreviouslyInsertedCacheValues(on: sut)
     }
 
     func test_delete_deliversNoErrorOnEmptyCache() {
