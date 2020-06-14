@@ -75,7 +75,7 @@ class CoreDataFeedStore: FeedStore {
     }
     
     func deleteCachedFeed(completion: @escaping DeletionCompletion) {
-        queue.async { [weak self] in
+        queue.async(flags: .barrier) { [weak self] in
             guard let self = self else { return }
             let context = self.coreDataClient.newBackgroundContext()
             self.coreDataClient.clearCache(in: context)
@@ -203,9 +203,9 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     }
 
     func test_storeSideEffects_runSerially() {
-//        let sut = makeSUT()
-//
-//        assertThatSideEffectsRunSerially(on: sut)
+        let sut = makeSUT()
+
+        assertThatSideEffectsRunSerially(on: sut)
     }
     
     // - MARK: Helpers
