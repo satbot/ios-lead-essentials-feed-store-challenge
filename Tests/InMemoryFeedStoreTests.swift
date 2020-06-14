@@ -5,13 +5,7 @@
 import XCTest
 import FeedStoreChallenge
 
-class InMemoryFeedStoreChallengeTests: XCTestCase, FeedStoreSpecs {
-	
-//
-//   We recommend you to implement one test at a time.
-//   Uncomment the test implementations one by one.
-// 	 Follow the process: Make the test pass, commit, and move to the next one.
-//
+class InMemoryFeedStoreTests: XCTestCase, FeedStoreSpecs {
 
 	func test_retrieve_deliversEmptyOnEmptyCache() {
 		let sut = makeSUT()
