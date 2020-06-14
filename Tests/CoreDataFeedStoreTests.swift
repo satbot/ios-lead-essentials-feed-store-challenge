@@ -5,18 +5,121 @@
 import XCTest
 import FeedStoreChallenge
 
+extension CoreDataClient {
+    func retrieveFeedCache(from context: NSManagedObjectContext? = nil) -> (feed: [LocalFeedImage], timestamp: Date)? {
+        let context = context ?? viewContext
+        let fetchRequest: NSFetchRequest<ManagedCache> = ManagedCache.fetchRequest()
+        do {
+            guard
+                let managedCache = try context.fetch(fetchRequest).first,
+                let managedFeed = managedCache.feed?.array as? [ManagedLocalFeedImage],
+                let cacheTimestamp = managedCache.timestamp
+                else { return nil }
+            
+            let feed = managedFeed.compactMap { $0.localFeedImage }
+            return (feed: feed, timestamp: cacheTimestamp)
+        } catch {
+            return nil
+        }
+    }
+}
+
+extension CoreDataClient {
+    func clearCache() {
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "Cache")
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try viewContext.execute(deleteRequest)
+        } catch {
+            fatalError("Failed to clear feed cache: \(error.localizedDescription)")
+        }
+    }
+}
+
+extension ManagedLocalFeedImage {
+    
+    static func from(_ localFeedImage: LocalFeedImage, in context: NSManagedObjectContext) -> ManagedLocalFeedImage {
+        let managedLocalFeedImage = ManagedLocalFeedImage(context: context)
+        managedLocalFeedImage.id = localFeedImage.id
+        managedLocalFeedImage.imageDescription = localFeedImage.description
+        managedLocalFeedImage.location = localFeedImage.location
+        managedLocalFeedImage.url = localFeedImage.url
+        return managedLocalFeedImage
+    }
+    
+    var localFeedImage: LocalFeedImage? {
+        guard
+            let id = id,
+            let url = url
+            else { return nil }
+        
+        return LocalFeedImage(id: id,
+                              description: imageDescription,
+                              location: location,
+                              url: url)
+    }
+}
+
 class CoreDataFeedStore: FeedStore {
+    
+    private let coreDataClient: CoreDataClient
+    
+    init(_ coreDataClient: CoreDataClient) {
+        self.coreDataClient = coreDataClient
+    }
+    
     func deleteCachedFeed(completion: @escaping DeletionCompletion) {}
     
-    func insert(_ feed: [LocalFeedImage], timestamp: Date, completion: @escaping InsertionCompletion) {}
+    private let queue = DispatchQueue(label: "\(CoreDataFeedStore.self)Queue", qos: .userInitiated, attributes: .concurrent)
+    
+    func insert(_ feed: [LocalFeedImage], timestamp: Date, completion: @escaping InsertionCompletion) {
+        queue.async(flags: .barrier) { [weak self] in
+            
+            guard let self = self else { return }
+            let backgroundContext = self.coreDataClient.newBackgroundContext()
+            
+            let managedLocalFeed = NSOrderedSet(array: feed.map { ManagedLocalFeedImage.from($0, in: backgroundContext) })
+            let managedCache = ManagedCache.init(context: backgroundContext)
+            managedCache.feed = managedLocalFeed
+            managedCache.timestamp = timestamp
+            
+            self.coreDataClient.saveContext(backgroundContext: backgroundContext)
+            completion(nil)
+        }
+    }
     
     func retrieve(completion: @escaping RetrievalCompletion) {
-        completion(.empty)
+        queue.async { [weak self] in
+            
+            guard
+                let self = self
+                else { return }
+            
+            guard
+                let feedCache = self.coreDataClient.retrieveFeedCache(),
+                !feedCache.feed.isEmpty
+                else { return completion(.empty) }
+            
+            completion(.found(feed: feedCache.feed, timestamp: feedCache.timestamp))
+        }
     }
 }
 
 class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
 
+    private var coreDataClient: CoreDataClient!
+    
+    override func setUp() {
+        let exp = XCTestExpectation(description: "Expect core data client to be initialised")
+        coreDataClient = CoreDataClient() {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+        
+        coreDataClient.clearCache()
+    }
+    
     func test_retrieve_deliversEmptyOnEmptyCache() {
         let sut = makeSUT()
 
@@ -30,9 +133,9 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     }
 
     func test_retrieve_deliversFoundValuesOnNonEmptyCache() {
-//        let sut = makeSUT()
-//
-//        assertThatRetrieveDeliversFoundValuesOnNonEmptyCache(on: sut)
+        let sut = makeSUT()
+
+        assertThatRetrieveDeliversFoundValuesOnNonEmptyCache(on: sut)
     }
 
     func test_retrieve_hasNoSideEffectsOnNonEmptyCache() {
@@ -92,7 +195,11 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     // - MARK: Helpers
     
     private func makeSUT() -> FeedStore {
-        CoreDataFeedStore()
+        return CoreDataFeedStore(coreDataClient)
+    }
+    
+    private func eraseCoreDataCache() {
+        
     }
     
 }
