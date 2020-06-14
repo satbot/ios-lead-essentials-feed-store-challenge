@@ -29,12 +29,13 @@ extension CoreDataClient {
 }
 
 extension CoreDataClient {
-    func clearCache() {
+    func clearCache(in context: NSManagedObjectContext? = nil) {
+        let context = context ?? viewContext
         let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "Cache")
         let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
         
         do {
-            try viewContext.execute(deleteRequest)
+            try context.execute(deleteRequest)
         } catch {
             fatalError("Failed to clear feed cache: \(error.localizedDescription)")
         }
@@ -74,7 +75,12 @@ class CoreDataFeedStore: FeedStore {
     }
     
     func deleteCachedFeed(completion: @escaping DeletionCompletion) {
-        completion(nil)
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let context = self.coreDataClient.newBackgroundContext()
+            self.coreDataClient.clearCache(in: context)
+            completion(nil)
+        }
     }
     
     private let queue = DispatchQueue(label: "\(CoreDataFeedStore.self)Queue", qos: .userInitiated, attributes: .concurrent)
@@ -191,9 +197,9 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     }
 
     func test_delete_emptiesPreviouslyInsertedCache() {
-//        let sut = makeSUT()
-//
-//        assertThatDeleteEmptiesPreviouslyInsertedCache(on: sut)
+        let sut = makeSUT()
+
+        assertThatDeleteEmptiesPreviouslyInsertedCache(on: sut)
     }
 
     func test_storeSideEffects_runSerially() {
