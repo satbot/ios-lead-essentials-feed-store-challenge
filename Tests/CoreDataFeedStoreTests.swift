@@ -73,7 +73,9 @@ class CoreDataFeedStore: FeedStore {
         self.coreDataClient = coreDataClient
     }
     
-    func deleteCachedFeed(completion: @escaping DeletionCompletion) {}
+    func deleteCachedFeed(completion: @escaping DeletionCompletion) {
+        completion(nil)
+    }
     
     private let queue = DispatchQueue(label: "\(CoreDataFeedStore.self)Queue", qos: .userInitiated, attributes: .concurrent)
     
@@ -171,9 +173,9 @@ class CoreDataFeedStoreTests: XCTestCase, FeedStoreSpecs {
     }
 
     func test_delete_deliversNoErrorOnEmptyCache() {
-//        let sut = makeSUT()
-//
-//        assertThatDeleteDeliversNoErrorOnEmptyCache(on: sut)
+        let sut = makeSUT()
+
+        assertThatDeleteDeliversNoErrorOnEmptyCache(on: sut)
     }
 
     func test_delete_hasNoSideEffectsOnEmptyCache() {
